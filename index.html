@@ -12,7 +12,6 @@
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
-    <div>does this work</div>
     <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Charity Organization Lookup</h1>
 
@@ -52,7 +51,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const einInput = document.getElementById('einInput');
-            const apiKeyInput = document.getElementById('apiKeyInput'); // New API key input
+            const apiKeyInput = document.getElementById('apiKeyInput');
             const lookupButton = document.getElementById('lookupButton');
             const apiResponsePre = document.getElementById('apiResponse');
             const messageBox = document.getElementById('messageBox');
@@ -79,9 +78,9 @@
 
             lookupButton.addEventListener('click', async () => {
                 const ein = einInput.value.trim();
-                const apiKey = apiKeyInput.value.trim(); // Get API key value
-                hideMessage(); // Clear previous messages
-                apiResponsePre.textContent = 'Loading...'; // Show loading state
+                const apiKey = apiKeyInput.value.trim();
+                hideMessage();
+                apiResponsePre.textContent = 'Loading...';
 
                 if (!ein) {
                     apiResponsePre.textContent = '';
@@ -89,52 +88,79 @@
                     return;
                 }
 
-                // Construct the API URL using the provided snippet pattern
                 const apiUrl = `https://api.charityapi.org/api/organizations/${ein}`;
 
-                // Prepare headers, including Authorization if an API key is provided
                 const requestHeaders = {
                     'Content-Type': 'application/json'
                 };
+
+                // IMPORTANT: Check Charity API documentation for correct API key header/parameter
+                // Common formats:
+                // 1. Authorization: Bearer YOUR_API_KEY (used below)
+                // 2. X-API-Key: YOUR_API_KEY
+                // 3. API key as a query parameter: https://api.charityapi.org/api/organizations/${ein}?apiKey=${apiKey}
                 if (apiKey) {
-                    // Assuming the API key is passed as a Bearer token in the Authorization header
-                    // Adjust this header name/format if the Charity API requires a different method
                     requestHeaders['Authorization'] = `Bearer ${apiKey}`;
-                    // Or if it's a custom header, e.g., requestHeaders['X-API-KEY'] = apiKey;
+                    // If Charity API uses a different header, change 'Authorization' to that header name.
+                    // For example: requestHeaders['X-Api-Key'] = apiKey;
                 }
 
                 try {
-                    // Make the API call using fetch with headers
                     const response = await fetch(apiUrl, {
-                        method: 'GET', // Explicitly set method for clarity
+                        method: 'GET',
                         headers: requestHeaders
                     });
 
-                    // Check if the response was successful
+                    console.log('Fetch Response Object:', response); // Log the full response object
+
                     if (!response.ok) {
-                        // Attempt to parse error data, but be robust if it's not JSON
                         let errorDetails = '';
-                        try {
-                            const errorData = await response.json();
-                            errorDetails = JSON.stringify(errorData, null, 2);
-                        } catch (e) {
-                            errorDetails = response.statusText;
+                        const contentType = response.headers.get('content-type');
+
+                        // Try to parse error body as JSON first, then as text
+                        if (contentType && contentType.includes('application/json')) {
+                            try {
+                                const errorData = await response.json();
+                                errorDetails = JSON.stringify(errorData, null, 2);
+                            } catch (e) {
+                                console.warn('Could not parse error response as JSON, trying as text:', e);
+                                errorDetails = await response.text();
+                            }
+                        } else {
+                            errorDetails = await response.text();
                         }
-                        throw new Error(`HTTP error! Status: ${response.status}. Details: ${errorDetails}`);
+
+                        console.error('API Error Response (Status Code):', response.status);
+                        console.error('API Error Response (Text/Details):', errorDetails);
+
+                        throw new Error(`HTTP Error! Status: ${response.status} (${response.statusText}). Details: ${errorDetails || 'No additional details.'}`);
                     }
 
-                    // Parse the JSON response
                     const data = await response.json();
+                    console.log('API Success Response Data:', data);
 
-                    // Display the formatted JSON response
                     apiResponsePre.textContent = JSON.stringify(data, null, 2);
                     showMessage('Organization data fetched successfully!', 'success');
 
                 } catch (error) {
-                    // Handle any errors that occurred during the fetch operation
                     apiResponsePre.textContent = 'Error fetching data.';
-                    console.error('Error fetching data:', error);
-                    showMessage(`Failed to lookup organization: ${error.message}`, 'error');
+                    console.error('Fetch operation failed:', error); // Log the entire error object
+
+                    let displayMessage = `Failed to lookup organization: ${error.message}`;
+
+                    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                        displayMessage = "Network error or potential CORS issue. Please check your browser's console for 'Cross-Origin' errors in the Network tab.";
+                    } else if (error.message.includes("HTTP Error! Status: 401")) {
+                        displayMessage = "Authentication failed (401 Unauthorized). Please double-check your API key and its required format.";
+                    } else if (error.message.includes("HTTP Error! Status: 403")) {
+                        displayMessage = "Forbidden (403). Access denied. Verify API key, permissions, or rate limits.";
+                    } else if (error.message.includes("HTTP Error! Status: 404")) {
+                        displayMessage = "Organization not found (404). Please verify the EIN is correct.";
+                    } else if (error.message.includes("HTTP Error! Status: 500")) {
+                        displayMessage = "Server error (500). The Charity API might be experiencing issues.";
+                    }
+
+                    showMessage(displayMessage, 'error');
                 }
             });
         });
