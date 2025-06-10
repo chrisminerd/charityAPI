@@ -77,6 +77,8 @@
             }
 
             lookupButton.addEventListener('click', async () => {
+                console.log('Lookup button clicked!'); // Confirm button click
+
                 const ein = einInput.value.trim();
                 const apiKey = apiKeyInput.value.trim();
                 hideMessage();
@@ -105,11 +107,19 @@
                     // For example: requestHeaders['X-Api-Key'] = apiKey;
                 }
 
+                const timeout = 10000; // 10 seconds timeout
+
                 try {
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), timeout);
+
                     const response = await fetch(apiUrl, {
                         method: 'GET',
-                        headers: requestHeaders
+                        headers: requestHeaders,
+                        signal: controller.signal // Link the AbortController to the fetch request
                     });
+
+                    clearTimeout(id); // Clear the timeout if fetch completes within time
 
                     console.log('Fetch Response Object:', response); // Log the full response object
 
@@ -148,7 +158,9 @@
 
                     let displayMessage = `Failed to lookup organization: ${error.message}`;
 
-                    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    if (error.name === 'AbortError') {
+                        displayMessage = "Request timed out. The API did not respond within 10 seconds.";
+                    } else if (error instanceof TypeError && error.message === 'Failed to fetch') {
                         displayMessage = "Network error or potential CORS issue. Please check your browser's console for 'Cross-Origin' errors in the Network tab.";
                     } else if (error.message.includes("HTTP Error! Status: 401")) {
                         displayMessage = "Authentication failed (401 Unauthorized). Please double-check your API key and its required format.";
